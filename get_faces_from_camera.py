@@ -1,13 +1,3 @@
-# Copyright (C) 2018-2021 coneypo
-# SPDX-License-Identifier: MIT
-
-# Author:   coneypo
-# Blog:     http://www.cnblogs.com/AdaminXie
-# GitHub:   https://github.com/coneypo/Dlib_face_recognition_from_camera
-# Mail:     coneypo@foxmail.com
-
-# 进行人脸录入 / Face register
-
 import dlib
 import numpy as np
 import cv2
@@ -15,10 +5,11 @@ import os
 import shutil
 import time
 import logging
+from tkinter import Tk, Label, Entry, Button, StringVar, IntVar
+from database.connection import get_collection
 
 # Dlib 正向人脸检测器 / Use frontal face detector of Dlib
 detector = dlib.get_frontal_face_detector()
-
 
 class Face_Register:
     def __init__(self):
@@ -38,6 +29,9 @@ class Face_Register:
         self.fps = 0
         self.fps_show = 0
         self.start_time = time.time()
+
+        # MongoDB collection
+        self.collection = get_collection()
 
     # 新建保存人脸图像文件和数据 CSV 文件夹 / Mkdir for saving photos and csv
     def pre_work_mkdir(self):
@@ -85,8 +79,7 @@ class Face_Register:
     def draw_note(self, img_rd):
         # 添加说明 / Add some notes
         cv2.putText(img_rd, "Face Register", (20, 40), self.font, 1, (255, 255, 255), 1, cv2.LINE_AA)
-        cv2.putText(img_rd, "FPS:   " + str(self.fps_show.__round__(2)), (20, 100), self.font, 0.8, (0, 255, 0), 1,
-                    cv2.LINE_AA)
+        cv2.putText(img_rd, "FPS:   " + str(self.fps_show.__round__(2)), (20, 100), self.font, 0.8, (0, 255, 0), 1, cv2.LINE_AA)
         cv2.putText(img_rd, "Faces: " + str(self.current_frame_faces_cnt), (20, 140), self.font, 0.8, (0, 255, 0), 1, cv2.LINE_AA)
         cv2.putText(img_rd, "N: Create face folder", (20, 350), self.font, 0.8, (255, 255, 255), 1, cv2.LINE_AA)
         cv2.putText(img_rd, "S: Save current face", (20, 400), self.font, 0.8, (255, 255, 255), 1, cv2.LINE_AA)
@@ -158,9 +151,12 @@ class Face_Register:
                                 for ii in range(height*2):
                                     for jj in range(width*2):
                                         img_blank[ii][jj] = img_rd[d.top()-hh + ii][d.left()-ww + jj]
-                                cv2.imwrite(current_face_dir + "/img_face_" + str(self.ss_cnt) + ".jpg", img_blank)
-                                logging.info("%-40s %s/img_face_%s.jpg", "写入本地 / Save into：",
-                                             str(current_face_dir), str(self.ss_cnt))
+                                img_path = current_face_dir + "/img_face_" + str(self.ss_cnt) + ".jpg"
+                                cv2.imwrite(img_path, img_blank)
+                                logging.info("%-40s %s/img_face_%s.jpg", "写入本地 / Save into：", str(current_face_dir), str(self.ss_cnt))
+                                
+                                # Open GUI to get user details
+                                self.open_gui(img_path)
                             else:
                                 logging.warning("请先按 'N' 来建文件夹, 按 'S' / Please press 'N' and press 'S'")
 
@@ -178,6 +174,44 @@ class Face_Register:
 
             cv2.namedWindow("camera", 1)
             cv2.imshow("camera", img_rd)
+
+    def open_gui(self, img_path):
+        def save_data():
+            name = name_var.get()
+            age = age_var.get()
+            location = location_var.get()
+            if name and age and location:
+                face_data = {
+                    "name": name,
+                    "age": age,
+                    "location": location,
+                    "image_path": img_path,
+                    "timestamp": time.time()
+                }
+                self.collection.insert_one(face_data)
+                root.destroy()
+            else:
+                print("Please fill all fields")
+
+        root = Tk()
+        root.title("Enter Details")
+
+        name_var = StringVar()
+        age_var = IntVar()
+        location_var = StringVar()
+
+        Label(root, text="Name").grid(row=0, column=0)
+        Entry(root, textvariable=name_var).grid(row=0, column=1)
+
+        Label(root, text="Age").grid(row=1, column=0)
+        Entry(root, textvariable=age_var).grid(row=1, column=1)
+
+        Label(root, text="Location").grid(row=2, column=0)
+        Entry(root, textvariable=location_var).grid(row=2, column=1)
+
+        Button(root, text="Save", command=save_data).grid(row=3, column=0, columnspan=2)
+
+        root.mainloop()
 
     def run(self):
         # cap = cv2.VideoCapture("video.mp4")   # Get video stream from video file
